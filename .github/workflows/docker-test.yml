@@ -1,0 +1,77 @@
+# .github/workflows/docker-test.yml
+
+name: Docker Build and Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  docker-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Build Docker image
+      - name: Build Docker Image
+        run: |
+          docker build -t flask-app .
+
+      # Print image size
+      - name: Show Image Size
+        run: |
+          docker images flask-app
+
+      # Run container
+      - name: Start Container
+        run: |
+          docker run -d --name flask-container -p 5000:5000 flask-app
+
+      # Wait for app to start
+      - name: Wait for Container
+        run: |
+          sleep 10
+
+      # Test /health endpoint
+      - name: Test Health Endpoint
+        run: |
+          curl -f http://localhost:5000/health
+
+      # Test POST endpoint
+      - name: Test Create API
+        run: |
+          curl -X POST http://localhost:5000/items \
+          -H "Content-Type: application/json" \
+          -d '{"name":"Laptop"}'
+
+      # Test GET endpoint
+      - name: Test List API
+        run: |
+          curl -f http://localhost:5000/items
+
+      # Print logs if tests fail
+      - name: Show Container Logs on Failure
+        if: failure()
+        run: |
+          docker logs flask-container
+
+      # Run Trivy scan
+      - name: Run Trivy Scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: flask-app
+          format: table
+          exit-code: 0
+          severity: HIGH,CRITICAL
+
+      # Cleanup always runs
+      - name: Cleanup Container
+        if: always()
+        run: |
+          docker stop flask-container || true
+          docker rm flask-container || true
