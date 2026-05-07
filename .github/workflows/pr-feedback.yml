@@ -1,0 +1,74 @@
+# .github/workflows/pr-feedback.yml
+
+name: PR Feedback
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest flake8 bandit
+
+      # Run flake8 (do not fail workflow)
+      - name: Run flake8
+        run: |
+          flake8 . > flake8-report.txt || true
+
+      # Run bandit (do not fail workflow)
+      - name: Run bandit
+        run: |
+          bandit -r . > bandit-report.txt || true
+
+      # Run pytest and save results
+      - name: Run tests
+        run: |
+          pytest --tb=short > pytest-report.txt || true
+
+      # Create markdown summary
+      - name: Generate PR Comment
+        run: |
+          echo "## CI Feedback Report" > comment.md
+          echo "" >> comment.md
+
+          echo "### Flake8 Lint Results" >> comment.md
+          echo '```' >> comment.md
+          cat flake8-report.txt >> comment.md
+          echo '```' >> comment.md
+
+          echo "" >> comment.md
+          echo "### Bandit Security Scan" >> comment.md
+          echo '```' >> comment.md
+          cat bandit-report.txt >> comment.md
+          echo '```' >> comment.md
+
+          echo "" >> comment.md
+          echo "### Pytest Results" >> comment.md
+          echo '```' >> comment.md
+          cat pytest-report.txt >> comment.md
+          echo '```' >> comment.md
+
+      # Post PR comment using GitHub CLI
+      - name: Post Comment to PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body-file comment.md
